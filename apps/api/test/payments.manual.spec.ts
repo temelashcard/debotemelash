@@ -1,7 +1,7 @@
 /**
  * Cash payments and trials (DECISIONS.md, 2026-11-06): owners pay in cash and report the amount,
  * the day and who took it; Owner or Finance admins approve or reject it. Trials are 15 days, then
- * a fee each month; 7 days after a trial or a paid month runs out the business pauses until a
+ * one fee a year; 7 days after a trial or a year's due date the business pauses until a
  * payment is approved. Admins can extend a trial to a date they pick.
  */
 import type { INestApplication } from '@nestjs/common';
@@ -50,8 +50,8 @@ describeDb('Cash payments and trials', () => {
     return { id: b.id as string, ownerToken: ownerToken as string };
   }
   const pay = (token: string, body: object = {}) =>
-    own(token).post('/payments', { purpose: 'plan', amount: 1600, receivedBy: 'Hana Tesfaye', paidOn: today(), ...body });
-  /** The month's fee first fell due this many days ago, on a live shop. */
+    own(token).post('/payments', { purpose: 'plan', amount: 19000, receivedBy: 'Hana Tesfaye', paidOn: today(), ...body });
+  /** The year's fee fell due this many days ago, on a live shop. */
   const dueDaysAgo = async (id: string, days: number) => {
     await sql`insert into tc.plan_fee (business_id, finance_year, plan, branches, fee_birr, base_birr, extra_birr, commission_base_birr, commission_extra_birr, gov_share_percent, due_on, reason)
       select business_id, finance_year, plan, branches, fee_birr, base_birr, extra_birr, commission_base_birr, commission_extra_birr, gov_share_percent,
@@ -79,6 +79,14 @@ describeDb('Cash payments and trials', () => {
     await sql?.end();
   });
 
+  it('the public website reads prices, the trial and contact details from the settings', async () => {
+    const site = (await api().get('/api/v1/site').expect(200)).body;
+    expect(site).toMatchObject({ trialDays: 15, graceDays: 7, starter: 19000, full: 21000, extraBranch: 5000, fullBranches: 2, support: { phone: expect.any(String), telegram: expect.any(String) } });
+    await sql`update tc.setting set value = '20000' where key = 'plan.starter.yearly_fee_birr'`;
+    await sql`insert into tc.setting (key, value) values ('support.phone', '"0911 000000"') on conflict (key) do update set value = excluded.value`;
+    expect((await api().get('/api/v1/site').expect(200)).body).toMatchObject({ starter: 20000, support: { phone: '0911 000000' } });
+  });
+
   it('a new business gets a 15-day trial when approved', async () => {
     const b = await newBusiness('Tana Coffee', '962107733');
     const [r] = await sql`select status, extract(epoch from trial_ends_at - now()) / 86400 as days from tc.business where id = ${b.id}`;
@@ -92,17 +100,17 @@ describeDb('Cash payments and trials', () => {
     const b = await newBusiness('Tana Coffee', '962107733');
     await sql`update tc.setting set value = '"Join Debo office, Bole Road"' where key = 'pay.cash'`;
     const before = (await own(b.ownerToken).get('/plan').expect(200)).body;
-    expect(before).toMatchObject({ monthly: 1600, fee: 1600, balance: 1600, payTo: { cash: 'Join Debo office, Bole Road' } });
+    expect(before).toMatchObject({ fee: 19000, balance: 19000, payTo: { cash: 'Join Debo office, Bole Road' } });
 
     const sent = (await pay(b.ownerToken).expect(201)).body;
     expect(sent).toMatchObject({ status: 'waiting', reference: expect.stringMatching(/^CASH-[0-9A-F]{8}$/) });
     const plan = (await own(b.ownerToken).get('/plan').expect(200)).body;
-    expect(plan.claims).toEqual([expect.objectContaining({ id: sent.id, status: 'waiting', amount: 1600, method: 'cash', receivedBy: 'Hana Tesfaye', transactionId: sent.reference })]);
+    expect(plan.claims).toEqual([expect.objectContaining({ id: sent.id, status: 'waiting', amount: 19000, method: 'cash', receivedBy: 'Hana Tesfaye', transactionId: sent.reference })]);
 
     // Money: Owner and Finance see it; Support does not.
     await as(support).get('/payment-claims').expect(403);
     const list = (await as(finance).get('/payment-claims').expect(200)).body;
-    expect(list).toEqual([expect.objectContaining({ id: sent.id, business: 'Tana Coffee', amount: 1600, status: 'waiting', balance: 1600, receivedBy: 'Hana Tesfaye' })]);
+    expect(list).toEqual([expect.objectContaining({ id: sent.id, business: 'Tana Coffee', amount: 19000, status: 'waiting', balance: 19000, receivedBy: 'Hana Tesfaye' })]);
     const one = (await as(finance).get(`/payment-claims/${sent.id}`).expect(200)).body;
     expect(one).toMatchObject({ method: 'cash', receivedBy: 'Hana Tesfaye', screenshot: null });
 
@@ -111,7 +119,7 @@ describeDb('Cash payments and trials', () => {
     await as(finance).post(`/payment-claims/${sent.id}/approve`).expect(409); // once
     expect((await sql`select status from tc.business where id = ${b.id}`)[0].status).toBe('active');
     const [p] = await sql`select method, reference, amount_birr from tc.payment where business_id = ${b.id}`;
-    expect(p).toMatchObject({ method: 'cash', reference: sent.reference, amount_birr: 1600 });
+    expect(p).toMatchObject({ method: 'cash', reference: sent.reference, amount_birr: 19000 });
     const after = (await own(b.ownerToken).get('/plan').expect(200)).body;
     expect(after).toMatchObject({ billing: 'paid', coversUntil: expect.any(String), claims: [expect.objectContaining({ status: 'approved', receiptNo: ok.receiptNo })] });
     expect((await own(b.ownerToken).get('/inbox').expect(200)).body.messages.map((m: { title: string }) => m.title)).toContain('Payment approved');
@@ -143,24 +151,24 @@ describeDb('Cash payments and trials', () => {
     await pay(pilot.ownerToken).expect(409); // a pilot has nothing to pay
   });
 
-  it('a new month falls due each month; paying it moves the next due day on', async () => {
+  it('one payment covers the year; a part payment leaves the rest due', async () => {
     const b = await newBusiness('Tana Coffee', '962107733');
-    await dueDaysAgo(b.id, 40); // the second month has started
+    await dueDaysAgo(b.id, 40);
     let plan = (await own(b.ownerToken).get('/plan').expect(200)).body;
-    expect(plan).toMatchObject({ monthly: 1600, fee: 3200, balance: 3200, billing: 'overdue' });
-    const part = (await pay(b.ownerToken).expect(201)).body;
+    expect(plan).toMatchObject({ fee: 19000, balance: 19000, billing: 'overdue' });
+    const part = (await pay(b.ownerToken, { amount: 9000 }).expect(201)).body;
     await as(finance).post(`/payment-claims/${part.id}/approve`).expect(201);
     plan = (await own(b.ownerToken).get('/plan').expect(200)).body;
-    expect(plan).toMatchObject({ paid: 1600, balance: 1600, billing: 'overdue' });
-    const rest = (await pay(b.ownerToken).expect(201)).body;
+    expect(plan).toMatchObject({ paid: 9000, balance: 10000, billing: 'overdue' });
+    const rest = (await pay(b.ownerToken, { amount: 10000 }).expect(201)).body;
     await as(finance).post(`/payment-claims/${rest.id}/approve`).expect(201);
     plan = (await own(b.ownerToken).get('/plan').expect(200)).body;
-    expect(plan).toMatchObject({ paid: 3200, balance: 0, billing: 'paid', coversUntil: expect.any(String) });
+    expect(plan).toMatchObject({ paid: 19000, balance: 0, billing: 'paid', coversUntil: expect.any(String) });
     expect(plan.coversUntil > today()).toBe(true);
     await pay(b.ownerToken).expect(409); // nothing due
   });
 
-  it('a shop that stops paying pauses 7 days after the paid month ends; paying lifts it', async () => {
+  it('a shop that does not pay pauses 7 days after the fee was due; paying lifts it', async () => {
     const b = await newBusiness('Tana Coffee', '962107733');
     const notifier = app.get(Notifier);
     await dueDaysAgo(b.id, 3);

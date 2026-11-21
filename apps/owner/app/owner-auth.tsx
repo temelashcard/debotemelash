@@ -125,8 +125,10 @@ export function OwnerAuth({ fromHome = false }: { fromHome?: boolean }) {
     switch (e.code) {
       case 'missing': case 'bad_phone': return L('owner.siMissing');
       case 'wrong_pin': {
+        // No count when the phone matches no account: say "wrong" without "0 tries left".
         const left = e.body.triesLeft;
-        return left === 1 ? L('owner.siWrong1') : L('owner.siWrong', { n: typeof left === 'number' ? left : 0 });
+        if (typeof left !== 'number') return L('owner.siWrongPlain');
+        return left === 1 ? L('owner.siWrong1') : L('owner.siWrong', { n: left });
       }
       case 'locked': return L('owner.siLocked');
       case 'bad_code': return L('owner.otpWrong');

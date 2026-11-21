@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { LANGUAGES, isLang, t, type Lang } from '@temelash/i18n';
 import { loadSession } from '@temelash/ui';
 import { JoinScreen } from './join';
+import { ShopPage } from './shop-page';
 import s from './welcome.module.css';
 
 /**
@@ -46,7 +47,8 @@ export function Welcome({ shopCode }: { shopCode?: string }) {
   const [pos, setPos] = useState(MIDDLE);
   // Last real (not "coming soon") language the wheel passed over.
   const [ok, setOk] = useState<Lang>('en');
-  const [step, setStep] = useState<'lang' | 'auth'>('lang');
+  // From a shop QR: language, then the shop page (DECISIONS 2026-11-21), then join / sign in.
+  const [step, setStep] = useState<'lang' | 'shop' | 'auth'>('lang');
   const [chosen, setChosen] = useState<Lang>('en');
 
   useEffect(() => {
@@ -161,7 +163,7 @@ export function Welcome({ shopCode }: { shopCode?: string }) {
     if (soon) return;
     document.cookie = `${LANG_COOKIE}=${lang}; path=/; max-age=31536000; samesite=lax`;
     setChosen(lang);
-    setStep('auth');
+    setStep(shopCode ? 'shop' : 'auth');
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -183,6 +185,10 @@ export function Welcome({ shopCode }: { shopCode?: string }) {
     if (Date.now() < noTapUntil.current) return;
     wheel.current?.scrollTo({ top: i * ROW, behavior: scrollBehavior() });
   };
+
+  if (step === 'shop' && shopCode) {
+    return <ShopPage lang={chosen} shopCode={shopCode} onStart={() => setStep('auth')} onBack={() => { setStartLang(chosen); setStep('lang'); }} />;
+  }
 
   if (step === 'auth') {
     // Step 2: the ScanJoin board, in the language just chosen.

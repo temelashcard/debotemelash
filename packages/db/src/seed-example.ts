@@ -97,9 +97,9 @@ async function main() {
         insert into tc.rule_set (business_id, version, stamps_needed, ladder, created_by, reward_cost_birr, created_at)
         values (${biz.id}, 1, 10, ${tx.json(LADDER)}, ${owner}, 80, ${joined}) returning id`;
 
-      // On the Full plan: this month's fee falls due today (DECISIONS.md, 2026-11-06).
+      // On the Full plan: this year's fee falls due today (DECISIONS.md, 2026-11-06).
       await tx`insert into tc.plan_fee (business_id, finance_year, plan, branches, fee_birr, base_birr, extra_birr, commission_base_birr, commission_extra_birr, gov_share_percent, due_on, reason)
-               values (${biz.id}, ${financeYearOf(ethiopianDateOf(new Date()))}, 'full', 2, 2100, 2100, 420, 420, 84, 30, (now() at time zone 'Africa/Addis_Ababa')::date, 'approved')`;
+               values (${biz.id}, ${financeYearOf(ethiopianDateOf(new Date()))}, 'full', 2, 21000, 21000, 5000, 4200, 1000, 30, (now() at time zone 'Africa/Addis_Ababa')::date, 'approved')`;
 
       await audit(joined, 'owner', owner, 'owner', biz.id, 'rules.changed', 'Stamp card set: 10 stamps, rewards at 5 and 10');
       await audit(joined, 'owner', owner, 'owner', biz.id, 'shop.details', 'Shop details saved');

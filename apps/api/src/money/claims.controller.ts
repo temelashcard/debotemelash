@@ -218,7 +218,7 @@ export class AdminClaimsController {
       const st = await billing(this.m, tx, id, biz.status);
       if (!st.t || st.billing === 'pilot' || st.billing === 'paid' || !['trial', 'active', 'paused'].includes(biz.status) || (biz.status === 'paused' && !biz.paused_unpaid)) throw conflict('no_trial');
       await tx`update tc.business set trial_ends_at = (${until}::date + 1)::timestamp at time zone 'Africa/Addis_Ababa', status = 'trial', paused_unpaid = false where id = ${id}`;
-      await this.m.setFee(tx, id, st.fy, { ...st.t, start: until, dueOn: until }, 'trial_extended', a.id);
+      await this.m.setFee(tx, id, st.fy, { ...st.t, dueOn: until }, 'trial_extended', a.id);
       await this.audit(tx, a, req, 'business.trial_extended', `Extended the trial of ${biz.name} to ${until}`, { businessId: id, detail: { from: biz.trial_ends_at, to: until } });
       return { status: 'trial', until };
     });

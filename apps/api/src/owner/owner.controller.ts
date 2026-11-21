@@ -4,7 +4,7 @@ import type { Request } from 'express';
 import { writeAudit, type Sql, type TransactionSql } from '@temelash/db';
 import { SQL } from '../db/db.module';
 import { SafetyService } from '../settings/safety.service';
-import { MoneyService, addDays, billingOf, moneyDate, todayEat } from '../money/money.service';
+import { MoneyService, addDays, billingOf, financeYearEnd, moneyDate, todayEat } from '../money/money.service';
 import { badRequest, conflict, forbidden, notFound } from '../common/api-error';
 import type { Actor } from '../auth/actor';
 import { AuthGuard, CurrentActor, Roles } from '../auth/auth.guard';
@@ -193,9 +193,9 @@ export class OwnerController {
     const missed = b.status === 'active' && billing === 'overdue' && t?.dueOn;
     const graceEndsOn = ended ? new Date(b.trial_ends_at!.getTime() + grace * 86_400_000 + 3 * 3_600_000).toISOString().slice(0, 10) : missed ? addDays(t!.dueOn!, grace) : null;
     return {
-      financeYear: fy, status: b.status, trialEndsAt: b.trial_ends_at, plan: t?.plan ?? null, branches: t?.branches ?? null, monthly: t?.monthly ?? 0,
+      financeYear: fy, status: b.status, trialEndsAt: b.trial_ends_at, plan: t?.plan ?? null, branches: t?.branches ?? null,
       fee: t?.fee ?? 0, paid, balance: Math.max(0, (t?.fee ?? 0) - paid), dueOn: t?.dueOn ?? null,
-      billing, coversUntil: t && t.fee > 0 && paid >= t.fee ? t.dueOn : null, payments,
+      billing, coversUntil: t && t.fee > 0 && paid >= t.fee ? financeYearEnd(fy) : null, payments,
       payTo: { cash: str('pay.cash') },
       claims: await claimsOf(this.sql, a.businessId!), graceEndsOn, pausedUnpaid: b.paused_unpaid,
     };

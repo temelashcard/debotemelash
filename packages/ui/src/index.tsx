@@ -1,4 +1,5 @@
 export * from './api';
+export * from './stamp-icons';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 
 export const tokens = {

@@ -370,7 +370,7 @@ function RequestDetail({ ctx, id, onChange }: { ctx: Ctx; id: string; onChange: 
       const on = (i: number) => !!chk[i];
       const allThree = on(0) && on(1) && on(2);
       out.push(<Check key="ck" title={A('checkTitle')} rows={items.map((t, i) => ({ t, on: on(i), go: () => setChk((c) => { const n = [...c]; n[i] = !n[i]; return n; }) }))} note={items.every((_, i) => on(i)) ? A('chkAll') : A('chkTick')} />);
-      const prices = { starter: num('plan.starter.monthly_fee_birr'), full: num('plan.full.monthly_fee_birr') };
+      const prices = { starter: num('plan.starter.yearly_fee_birr'), full: num('plan.full.yearly_fee_birr') };
       const approve = () => ctx.open({
         title: A('approveTitle', { a: q.business ?? '' }), sub: A('approveSub'), ok: A('approveStart'), note: q.agent ? undefined : A('noAgentNote'),
         groups: [
@@ -553,7 +553,7 @@ export function SettingsPage({ ctx, view }: { ctx: Ctx; view: Extract<View, { v:
   const subs = { rules: 'subRules', team: 'subTeam', safety: 'subSafety', account: 'subAccount' } as const;
   let body: React.ReactNode = null;
   if (tab === 'rules') {
-    const prices = rows([row('plan.starter.monthly_fee_birr', A('pStarter'), A('pStarterS'), 100, 0, 20000, birr), row('plan.full.monthly_fee_birr', A('pFull'), A('pFullS'), 100, 0, 20000, birr), row('plan.extra_branch.monthly_fee_birr', A('pExtra'), A('pExtraS'), 20, 0, 5000, birr)]);
+    const prices = rows([row('plan.starter.yearly_fee_birr', A('pStarter'), A('pStarterS'), 1000, 0, 100000, birr), row('plan.full.yearly_fee_birr', A('pFull'), A('pFullS'), 1000, 0, 100000, birr), row('plan.extra_branch.yearly_fee_birr', A('pExtra'), A('pExtraS'), 500, 0, 50000, birr)]);
     const comm = rows([row('agent.commission_percent.starter', A('cmStarter'), A('cmPaid'), 1, 0, 100, (n) => `${n}%`), row('agent.commission_percent.full', A('cmFull'), A('cmPaid'), 1, 0, 100, (n) => `${n}%`), row('agent.commission_percent.extra_branch', A('cmExtra'), A('cmExtraS'), 1, 0, 100, (n) => `${n}%`), row('government.share_percent_of_commission', A('govPct'), A('govPctS'), 5, 0, 60, (n) => A('uPct', { a: n }))]);
     body = (
       <Cols lw="1fr" rw="1fr"

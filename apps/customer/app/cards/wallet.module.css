@@ -169,7 +169,7 @@
   border: 1.5px dashed #bdbdbd;
   background: #fff;
 }
-.stamp[data-on='true'] { border: 1.5px solid transparent; background: var(--brand, #333) }
+.stamp[data-on='true'] { border: 1.5px solid transparent; background: var(--brand, #333); color: var(--brand-fg, #fff) }
 .stampN { font-size: 14px; letter-spacing: 0.4px; color: #595959 }
 
 .rewards { margin-top: 22px; border-top: 1.5px dashed #d0d0d0 }

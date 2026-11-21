@@ -65,7 +65,7 @@ describeDb('Phase 6 acceptance', () => {
   // ---------------------------------------------------------------- acceptance 1
   it('1. a message to "payment due" reaches exactly the businesses with a balance', async () => {
     // Sheba Salon pays its whole Starter fee; Moka House (Full) owes.
-    await as(admin).post(`/businesses/${w.bizB}/payments`, { amount: 1600, method: 'cash' }).expect(201);
+    await as(admin).post(`/businesses/${w.bizB}/payments`, { amount: 19000, method: 'cash' }).expect(201);
     const m = (await as(admin).post('/messages', { audience: 'due', title: 'Payment reminder', body: 'Your Temelash Card payment is due. Please pay by Telebirr.' }).expect(201)).body;
     expect(m.recipients).toBe(1);
     const moka = await ownerToken(w.owner.phone);

@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { OROMO_WEEKDAYS } from '@temelash/ethiopian-calendar';
+import { formatEthiopianDate, type Lang as CalLang } from '@temelash/ethiopian-calendar';
 import { t, type Lang, type MessageKey } from '@temelash/i18n';
-import { ApiFailure, authed } from '@temelash/ui';
-import { DateTime, Look, Poster, Security, formatDay, formatWhen, logText, setPrefs, type Prefs } from './owner-more';
+import { ApiFailure, STAMP_ICON_IDS, authed, stampIconPath } from '@temelash/ui';
+import { DateTime, Look, Poster, Security, Wifi, fgFor, formatDay, formatWhen, logText, setPrefs, type Prefs } from './owner-more';
 import { IC, Icon, Row, useLoad, type Lfn } from './owner-ui';
 import { AlertSettings, Unusual, alertSub } from './owner-safety';
 import { AccountRows, ChangePhone, CloseBiz, Privacy } from './owner-account';
@@ -24,7 +25,7 @@ type Screen =
   | { name: 'today' } | { name: 'review'; tab: 'appr' | 'hand' } | { name: 'customers' } | { name: 'customer'; cardId: string }
   | { name: 'team' } | { name: 'person'; id: string } | { name: 'addPerson' } | { name: 'shop' } | { name: 'card' } | { name: 'rules' }
   | { name: 'branches' } | { name: 'branch'; id: string | null } | { name: 'details' } | { name: 'reports' } | { name: 'log' }
-  | { name: 'look' } | { name: 'poster' } | { name: 'security' } | { name: 'datetime' } | { name: 'plan' } | { name: 'pay'; purpose: 'plan' | 'stand'; orderId?: string; amount: number }
+  | { name: 'look' } | { name: 'wifi' } | { name: 'poster' } | { name: 'security' } | { name: 'datetime' } | { name: 'plan' } | { name: 'pay'; purpose: 'plan' | 'stand'; orderId?: string; amount: number }
   | { name: 'inbox' } | { name: 'msg'; id: string } | { name: 'myreq' } | { name: 'news' } | { name: 'compose' }
   | { name: 'stands' } | { name: 'standcart' } | { name: 'standplaced'; id: string } | { name: 'standorders' } | { name: 'standorder'; id: string }
   | { name: 'alert'; id: string } | { name: 'alertset' } | { name: 'changephone' } | { name: 'closebiz' } | { name: 'privacy' } | { name: 'help' } | { name: 'roles' };
@@ -147,6 +148,7 @@ export function OwnerApp({ lang, me, onSignOut, onLang }: { lang: Lang; me: { ac
           <Row title={L('owner.shRules')} onClick={() => go({ name: 'rules' })} />
           <Row title={L('owner.shBranches')} sub={L('owner.shBranchesSub', { a: branches.data?.length ?? 0 }, branches.data?.length ?? 0)} onClick={() => go({ name: 'branches' })} />
           <Row title={L('owner.shLook')} sub={L('owner.shLookSub')} onClick={() => go({ name: 'look' })} />
+          {!isMgr && <Row title={L('owner.shWifi')} sub={L('owner.shWifiSub')} onClick={() => go({ name: 'wifi' })} />}
           <Row title={L('owner.shPoster')} sub={shop.data ? L('owner.shPosterSub').replace('MOKA24', shop.data.shopCode) : ''} onClick={() => go({ name: 'poster' })} />
           <Row title={L('owner.shDetails')} onClick={() => go({ name: 'details' })} />
         </ul>
@@ -160,7 +162,8 @@ export function OwnerApp({ lang, me, onSignOut, onLang }: { lang: Lang; me: { ac
     details: () => <Details L={L} shop={shop.data} onSaved={(m) => { setToast(m); shop.reload(); back(); }} />,
     reports: () => <Reports L={L} isMgr={isMgr} branches={branches.data ?? []} />,
     log: () => <Log L={L} lang={lang} />,
-    look: () => <Look L={L} shopName={shop.data?.name ?? ''} onSaved={setToast} />,
+    look: () => <Look L={L} shopName={shop.data?.name ?? ''} onSaved={(m) => { setToast(m); shop.reload(); back(); }} />,
+    wifi: () => <Wifi L={L} onSaved={(m) => { setToast(m); back(); }} />,
     poster: () => <><Poster L={L} shop={shop.data} />{!isMgr && <StandRows L={L} onOrder={() => go({ name: 'stands' })} onOrders={() => go({ name: 'standorders' })} />}</>,
     stands: () => <Stands L={L} lang={lang} cart={cart} setCart={setCart} onReview={() => go({ name: 'standcart' })} onToast={setToast} />,
     standcart: () => <StandCart L={L} lang={lang} cart={cart} onToast={setToast} onPlaced={(o) => { setCart({}); setStack([...stack.slice(0, -2), { name: 'standplaced', id: o.id }]); }} />,
@@ -189,7 +192,7 @@ export function OwnerApp({ lang, me, onSignOut, onLang }: { lang: Lang; me: { ac
     review: L('owner.attnLbl'), customer: L('owner.tabCustomers'), person: L('owner.tabTeam'), addPerson: L('owner.addPerson'),
     card: L('owner.shCard'), rules: L('owner.shRules'), branches: L('owner.shBranches'), branch: L('owner.shBranches'),
     details: L('owner.shDetails'), reports: L('owner.mnReports'), log: L('owner.mnLog'),
-    look: L('owner.shLook'), poster: L('owner.shPoster'), security: L('owner.mnSecurity'), datetime: L('owner.mnDateTime'), plan: L('owner.ttl_plan'), pay: L('owner.ttl_pay'), inbox: L('owner.ttl_inbox'), msg: L('owner.ttl_msg'), myreq: L('owner.ttl_myreq'), news: L('owner.ttl_news'), compose: L('owner.ttl_compose'),
+    look: L('owner.shLook'), wifi: L('owner.shWifi'), poster: L('owner.shPoster'), security: L('owner.mnSecurity'), datetime: L('owner.mnDateTime'), plan: L('owner.ttl_plan'), pay: L('owner.ttl_pay'), inbox: L('owner.ttl_inbox'), msg: L('owner.ttl_msg'), myreq: L('owner.ttl_myreq'), news: L('owner.ttl_news'), compose: L('owner.ttl_compose'),
     stands: L('owner.ttl_stands'), standcart: L('owner.ttl_standcart'), standplaced: L('owner.ttl_standplaced'), standorders: L('owner.ttl_standorders'), standorder: L('owner.ttl_standorder'), alert: L('owner.ttl_alert'), alertset: L('owner.ttl_alertset'), changephone: L('owner.ttl_changephone'), closebiz: L('owner.ttl_closebiz'), privacy: L('owner.ttl_privacy'), help: L('owner.ttl_help'), roles: L('owner.ttl_roles'),
   };
   const isRoot = stack.length === 1 && ['today', 'customers', 'team', 'shop'].includes(cur.name);
@@ -481,6 +484,16 @@ function Team({ L, isMgr, onOpen, onAdd, onRoles }: { L: Lfn; isMgr: boolean; on
   );
 }
 
+/** What to do with a temporary PIN: cashiers sign in at /staff, managers at /owner (with an SMS code). */
+function PinSteps({ L, role }: { L: Lfn; role: string }) {
+  const mgr = role === 'manager';
+  return (
+    <ol className={s.help} style={{ paddingLeft: 18 }}>
+      <li>{L(mgr ? 'owner.pm1' : 'owner.ps1')}</li><li>{L(mgr ? 'owner.pm2' : 'owner.ps2')}</li><li>{L('owner.ps3')}</li>
+    </ol>
+  );
+}
+
 function PersonScreen({ L, id, onToast, onGone }: { L: Lfn; id: string; onToast: (m: string) => void; onGone: () => void }) {
   const team = useLoad<Person[]>('/owner/team');
   const [temp, setTemp] = useState('');
@@ -499,7 +512,7 @@ function PersonScreen({ L, id, onToast, onGone }: { L: Lfn; id: string; onToast:
       {temp && (
         <div className={`${s.card} ${s.pad} tc-fade`}>
           <div className={s.pin}>{temp}</div>
-          <ol className={s.help} style={{ paddingLeft: 18 }}><li>{L('owner.ps1')}</li><li>{L('owner.ps2')}</li><li>{L('owner.ps3')}</li></ol>
+          <PinSteps L={L} role={p.role} />
         </div>
       )}
       <div className={s.section}>{L('owner.sdActions')}</div>
@@ -538,7 +551,7 @@ function AddPerson({ L, isMgr, branches }: { L: Lfn; isMgr: boolean; branches: B
       <div className="tc-fade">
         <h1 className={s.h1}>{name}</h1>
         <div className={s.pin}>{created.tempPin}</div>
-        <ol className={s.help} style={{ paddingLeft: 18 }}><li>{L('owner.ps1')}</li><li>{L('owner.ps2')}</li><li>{L('owner.ps3')}</li></ol>
+        <PinSteps L={L} role={role} />
       </div>
     );
   }
@@ -568,11 +581,44 @@ function AddPerson({ L, isMgr, branches }: { L: Lfn; isMgr: boolean; branches: B
   );
 }
 
+const TICK = 'M5 12.5l4.5 4.5L19 7.5';
+
+/** OwnCard "Stamp face": numbers or one icon on the card's spaces, previewed as customers see it. */
+function StampFace({ L, color, icon, onPick }: { L: Lfn; color: string; icon: string; onPick: (i: string) => void }) {
+  const fg = fgFor(color);
+  const face = stampIconPath(icon);
+  const dot = (on: boolean, n: number) => (
+    <span key={n} className={s.faceDot} data-on={on} style={on ? { background: color, color: fg } : undefined}>
+      {on ? <Icon d={face ?? TICK} size={18} color="currentColor" /> : face ? <Icon d={face} size={18} color="#a6a6a6" /> : <span className={s.faceN}>{n}</span>}
+    </span>
+  );
+  return (
+    <>
+      <div className={s.section}>{L('owner.sfTitle')}</div>
+      <p className={s.muted} style={{ marginTop: 0 }}>{L('owner.sfHelp')}</p>
+      <div className={`${s.card} ${s.pad} ${s.faceRow}`} role="img" aria-label={L('owner.sfPreview')}>{[1, 2, 3, 4, 5].map((n) => dot(n <= 2, n))}</div>
+      <div role="radiogroup" aria-label={L('owner.sfTitle')} className={s.chips}>
+        {STAMP_ICON_IDS.map((id) => {
+          const d = stampIconPath(id);
+          return (
+            <button key={id} type="button" role="radio" aria-checked={icon === id} aria-pressed={icon === id} aria-label={L(`owner.sf_${id}`)}
+              title={L(`owner.sf_${id}`)} className={`${s.chip} ${s.faceChip}`} onClick={() => onPick(id)}>
+              {d ? <Icon d={d} size={22} color="currentColor" /> : '123'}
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+}
+
 function CardEditor({ L, onSaved }: { L: Lfn; onSaved: (m: string) => void }) {
   const r = useLoad<Rules>('/owner/rules');
   const [full, setFull] = useState<number | null>(null);
   const [main, setMain] = useState('');
   const [early, setEarly] = useState<{ at: number; reward: string } | null>(null);
+  const look = useLoad<{ color: string; stampIcon: string }>('/owner/look');
+  const [icon, setIcon] = useState<string | null>(null);
   useEffect(() => {
     if (!r.data) return;
     const l = r.data.ladder;
@@ -580,10 +626,16 @@ function CardEditor({ L, onSaved }: { L: Lfn; onSaved: (m: string) => void }) {
     setMain(l[l.length - 1]?.reward ?? '');
     setEarly(l.length > 1 ? { at: l[0].at, reward: l[0].reward } : null);
   }, [r.data]);
+  useEffect(() => { if (look.data) setIcon(look.data.stampIcon); }, [look.data]);
   if (!r.data || full === null) return null;
   const save = async () => {
     const ladder = [...(early ? [early] : []), { at: full, reward: main }];
-    await authed('owner', 'POST', '/owner/rules', { ...r.data!, stampsNeeded: full, ladder });
+    // The stamp face is look only: saving just a new face must not start a new rule version.
+    if (look.data && icon && icon !== look.data.stampIcon) await authed('owner', 'POST', '/owner/look/stamp-icon', { icon });
+    const was = r.data!.ladder.map((t) => ({ at: t.at, reward: t.reward }));
+    if (full !== r.data!.stampsNeeded || JSON.stringify(ladder) !== JSON.stringify(was)) {
+      await authed('owner', 'POST', '/owner/rules', { ...r.data!, stampsNeeded: full, ladder });
+    }
     onSaved(L('owner.savedCard'));
   };
   return (
@@ -611,6 +663,7 @@ function CardEditor({ L, onSaved }: { L: Lfn; onSaved: (m: string) => void }) {
       ) : (
         <ul className={`${s.card} ${s.rows}`}><Row title={L('owner.cdEarlyT')} sub={L('owner.cdEarlyS')} onClick={() => setEarly({ at: Math.max(2, Math.floor(full / 2)), reward: '' })} /></ul>
       )}
+      {look.data && icon && <StampFace L={L} color={look.data.color} icon={icon} onPick={setIcon} />}
       <div className={`${s.card} ${s.pad}`} style={{ marginTop: 18 }}>
         <div className={s.rowTitle}>{L('owner.cdSameT')}</div>
         <div className={s.rowSub}>{L('owner.cdSame')}</div>
@@ -782,7 +835,7 @@ function Log({ L, lang }: { L: Lfn; lang: Lang }) {
 
 // ---------------------------------------------------------------- OwnPlan* (owners only)
 interface PlanData {
-  financeYear: number; status: string; trialEndsAt: string | null; plan: string | null; branches: number | null; monthly: number; fee: number; paid: number; balance: number;
+  financeYear: number; status: string; trialEndsAt: string | null; plan: string | null; branches: number | null; fee: number; paid: number; balance: number;
   dueOn: string | null; billing: string; coversUntil: string | null; payments: Array<{ receiptNo: string; amount: number; method: string; reference: string | null; at: string }>;
   payTo: PayTo; claims: Claim[]; graceEndsOn: string | null; pausedUnpaid: boolean;
 }
@@ -792,16 +845,17 @@ function PlanScreen({ L, lang, onPay }: { L: Lfn; lang: Lang; onPay: (amount: nu
   const d = p.data;
   const birr = (n: number) => L('owner.birr', { a: n.toLocaleString('en-US') });
   const day = (iso: string) => formatDay(new Date(iso.length === 10 ? iso + 'T12:00:00+03:00' : iso), lang);
+  const eth = (fy: number, m: number, dd: number) => formatEthiopianDate({ year: fy, month: m, day: dd }, lang as CalLang);
   const paid = d.billing === 'paid' || d.billing === 'pilot';
   const trial = d.billing === 'btrial' && d.trialEndsAt;
   const daysLeft = trial ? Math.max(0, Math.ceil((Date.parse(d.trialEndsAt!) - Date.now()) / 86_400_000)) : 0;
-  // A trial or month left unpaid: the grace days, or paused until a payment is approved (DECISIONS.md, 2026-11-06).
+  // A trial or year left unpaid: the grace days, or paused until a payment is approved (DECISIONS.md, 2026-11-06).
   const title = d.pausedUnpaid ? L('owner.plPausedT') : d.graceEndsOn ? L('owner.plGraceT') : paid ? L('owner.plPaidT') : trial ? L('owner.plTrialT', { a: daysLeft }) : L('owner.plDueT');
   const text = d.pausedUnpaid ? L('owner.plPausedText', { a: birr(d.balance) }) : d.graceEndsOn ? L('owner.plGraceText', { a: birr(d.balance), b: day(d.graceEndsOn) })
-    : paid ? (d.coversUntil ? L('owner.plCovers', { a: day(d.coversUntil) }) : '') : trial ? L('owner.plTrialText', { a: day(d.trialEndsAt!), b: birr(d.monthly) }) : d.dueOn ? L('owner.plDueText', { a: birr(d.balance), b: day(d.dueOn) }) : L('owner.plDueNow', { a: birr(d.balance) });
+    : paid ? (d.coversUntil ? L('owner.plCovers', { a: day(d.coversUntil) }) : '') : trial ? L('owner.plTrialText', { a: day(d.trialEndsAt!), b: birr(d.fee) }) : d.dueOn ? L('owner.plDueText', { a: birr(d.balance), b: day(d.dueOn) }) : L('owner.plDueNow', { a: birr(d.balance) });
   const planName = d.plan === 'full' ? L('owner.plFull') : d.plan === 'starter' ? L('owner.plStarter') : L('owner.plPilot');
   const method = (m: string) => ({ telebirr: L('owner.soTele'), cbe_birr: L('owner.payCbe'), cash: L('owner.soCash'), bank: L('owner.payBank') }[m] ?? m);
-  const rows: Array<[string, string]> = [[L('owner.plPlanK'), planName], [L('owner.plBrK'), L('owner.plBr', { a: d.branches ?? 1 }, d.branches ?? 1)], [L('owner.plPriceK'), birr(d.monthly)], [L('owner.plPaidK'), birr(d.paid)], [L('owner.plBalK'), birr(d.balance)]];
+  const rows: Array<[string, string]> = [[L('owner.plPlanK'), planName], [L('owner.plBrK'), L('owner.plBr', { a: d.branches ?? 1 }, d.branches ?? 1)], [L('owner.plPriceK'), birr(d.fee)], [L('owner.plPaidK'), birr(d.paid)], [L('owner.plBalK'), birr(d.balance)]];
   return (
     <>
       <div style={{ marginTop: 14, textAlign: 'center' }}>
@@ -810,6 +864,14 @@ function PlanScreen({ L, lang, onPay }: { L: Lfn; lang: Lang; onPay: (amount: nu
         <p className={s.help}>{text}</p>
       </div>
       <div className={s.kvCard} style={{ marginTop: 16 }}>{rows.map(([k, v]) => <div key={k} className={s.kvLine}><span style={{ color: '#444' }}>{k}</span><span style={{ fontWeight: 700, color: '#333', textAlign: 'right' }}>{v}</span></div>)}</div>
+      {paid && d.plan !== 'pilot' && (
+        <>
+          <div className={s.section}>{L('owner.plNextLbl')}</div>
+          <div className={`${s.card} ${s.pad}`} style={{ marginTop: 0 }}>
+            <p style={{ margin: 0, fontSize: 14, lineHeight: '20px', color: '#333' }}>{L('owner.plNextText', { a: eth(d.financeYear, 9, 1), b: eth(d.financeYear, 11, 1), c: eth(d.financeYear + 1, 10, 30) })}</p>
+          </div>
+        </>
+      )}
       <div className={s.section}>{L('owner.plHistLbl')}</div>
       {d.payments.length ? (
         <div className={s.kvCard}>{d.payments.map((x) => <div key={x.receiptNo} className={s.kvLine}><span style={{ color: '#444' }}>{day(x.at)} · {method(x.method)}</span><span style={{ fontWeight: 700, color: '#333', textAlign: 'right' }}>{birr(x.amount)}</span></div>)}</div>

@@ -7,10 +7,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "migrate": "tsx src/migrate.ts",
-    "seed": "tsx src/seed.ts",
+    "migrate": "tsx --env-file-if-exists=../../.env src/migrate.ts",
+    "seed": "tsx --env-file-if-exists=../../.env src/seed.ts",
     "test": "vitest run",
-    "seed:staff": "tsx src/seed-staff.ts",
+    "seed:staff": "tsx --env-file-if-exists=../../.env src/seed-staff.ts",
     "seed:example": "tsx --env-file=../../.env src/seed-example.ts"
   },
   "dependencies": {

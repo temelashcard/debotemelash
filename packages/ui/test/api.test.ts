@@ -52,6 +52,34 @@ describe('authed', () => {
     expect(loadSession('owner')).toEqual({ accessToken: 'old-access', refreshToken: 'old-refresh' });
   });
 
+  // Found in the browser check: two screens loading at once after the access token ended each
+  // refreshed with the same refresh token; the API treats the second as reuse and ends the session.
+  it('two calls that find the access token ended share one refresh', async () => {
+    const order: Reply[] = [
+      { status: 401, body: { error: 'bad_ticket' } },
+      { status: 401, body: { error: 'bad_ticket' } },
+      { status: 200, body: { accessToken: 'new-access', refreshToken: 'new-refresh' } },
+      { status: 200, body: { ok: 1 } },
+      { status: 200, body: { ok: 2 } },
+    ];
+    replies.push(...order);
+    const [a, b] = await Promise.all([authed('owner', 'GET', '/owner/team'), authed('owner', 'POST', '/owner/team', { name: 'Titu' })]);
+    expect([a, b]).toEqual([{ ok: 1 }, { ok: 2 }]);
+    expect(calls.filter((c) => c.url === '/api/v1/auth/refresh').length).toBe(1);
+    expect(calls.slice(3).map((c) => c.auth)).toEqual(['Bearer new-access', 'Bearer new-access']);
+    expect(loadSession('owner')).toEqual({ accessToken: 'new-access', refreshToken: 'new-refresh' });
+  });
+
+  it('a call that fails after another call already renewed retries with the new token', async () => {
+    replies.push({ status: 401, body: { error: 'bad_ticket' } }, { status: 200, body: { ok: true } });
+    const pending = authed('owner', 'GET', '/owner/team');
+    // Another call renewed the session while this one was on the way.
+    saveSession('owner', { accessToken: 'new-access', refreshToken: 'new-refresh' });
+    expect(await pending).toEqual({ ok: true });
+    expect(calls.map((c) => c.url)).toEqual(['/api/v1/owner/team', '/api/v1/owner/team']);
+    expect(calls[1].auth).toBe('Bearer new-access');
+  });
+
   it('refuses at once with no saved session', async () => {
     saveSession('owner', null);
     await expect(authed('owner', 'GET', '/owner/today')).rejects.toMatchObject({ status: 401, code: 'signed_out' });

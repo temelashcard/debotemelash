@@ -59,8 +59,8 @@ export class MoneyController {
     const paid = snap ? snap.paid(businessId) : await this.m.paid(tx, businessId, financeYear);
     const fee = t?.fee ?? 0;
     return {
-      plan: t?.plan ?? null, branches: t?.branches ?? null, monthly: t?.monthly ?? 0, fee, paid, balance: Math.max(0, fee - paid), dueOn: t?.dueOn ?? null,
-      billing: billingOf(status, t, paid, todayEat()), coversUntil: t && t.fee > 0 && paid >= t.fee ? t.dueOn : null,
+      plan: t?.plan ?? null, branches: t?.branches ?? null, fee, paid, balance: Math.max(0, fee - paid), dueOn: t?.dueOn ?? null,
+      billing: billingOf(status, t, paid, todayEat()), coversUntil: t && t.fee > 0 && paid >= t.fee ? financeYearEnd(financeYear) : null,
     };
   }
 
@@ -157,8 +157,7 @@ export class MoneyController {
     const fixes = await this.sql<{ kind: string; amount: number }[]>`
       select x.kind, x.amount_birr as amount, x.reason, x.at, ad.name as by from tc.payment x join tc.admin_user ad on ad.id = x.admin_id where x.fixes = ${id} order by x.at`;
     const amount = Number(p.original) + fixes.reduce((s, f) => s + f.amount, 0);
-    const terms = await this.m.feeFor(this.sql, String(p.businessId), Number(p.financeYear));
-    return { ...p, amount, reversed: fixes.some((f) => f.kind === 'reversal'), fixes, coversUntil: terms?.dueOn ?? null };
+    return { ...p, amount, reversed: fixes.some((f) => f.kind === 'reversal'), fixes, coversUntil: financeYearEnd(Number(p.financeYear)) };
   }
 
   /** AdminPayCorrect / AdminPayReverse: a new row with the difference, linked to the payment. */
@@ -213,7 +212,7 @@ export class MoneyController {
       if (plan === 'starter' && n > 1) throw conflict('starter_one_branch');
       if (cur?.plan === plan) throw badRequest('no_change');
       // From the free pilot to a paid plan the fee is due now; otherwise the due date stays.
-      const dueOn = plan === 'pilot' ? null : cur?.plan === 'pilot' || !cur?.start ? todayEat() : cur.start;
+      const dueOn = plan === 'pilot' ? null : cur?.plan === 'pilot' || !cur?.dueOn ? todayEat() : cur.dueOn;
       const t = await this.m.terms(plan, Math.max(1, n), dueOn);
       await this.m.setFee(tx, id, fy, t, 'plan_changed', a.id);
       await this.audit(tx, a, req, 'business.plan_changed', `Changed the plan of ${biz.name} to ${plan}`, { businessId: id, detail: { from: cur?.plan ?? null, to: plan, fee: t.fee } });
@@ -235,7 +234,7 @@ export class MoneyController {
       const cur = await this.m.feeFor(tx, id, fy);
       // A second branch moves Starter to Full (AdminAddBranch); a pilot stays free.
       const plan: Plan = cur?.plan === 'pilot' ? 'pilot' : 'full';
-      const t = await this.m.terms(plan, n + 1, cur?.start ?? (plan === 'pilot' ? null : todayEat()));
+      const t = await this.m.terms(plan, n + 1, cur?.dueOn ?? (plan === 'pilot' ? null : todayEat()));
       await this.m.setFee(tx, id, fy, t, 'branch_added', a.id);
       await this.audit(tx, a, req, 'business.branch_added', `Added a branch to ${biz.name}`, { businessId: id, detail: { branches: n + 1, fee: t.fee, name } });
       return { branches: n + 1, plan, fee: t.fee };

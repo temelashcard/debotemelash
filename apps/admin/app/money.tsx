@@ -91,7 +91,7 @@ export function FinancePage({ ctx }: { ctx: Ctx }) {
             { pill: b.billing },
           ] }))} empty={A('nothingHere')} foot={A('fFoot')} />}
         right={<>
-          <Kv title={A('priceList')} rows={[{ k: A('plStarter1'), v: birr(price('plan.starter.monthly_fee_birr')) }, { k: A('plFull2'), v: birr(price('plan.full.monthly_fee_birr')) }, { k: A('plExtraBr'), v: '+ ' + birr(price('plan.extra_branch.monthly_fee_birr')) }]} />
+          <Kv title={A('priceList')} rows={[{ k: A('plStarter1'), v: birr(price('plan.starter.yearly_fee_birr')) }, { k: A('plFull2'), v: birr(price('plan.full.yearly_fee_birr')) }, { k: A('plExtraBr'), v: '+ ' + birr(price('plan.extra_branch.yearly_fee_birr')) }]} />
           <Kv title={A('howYear')} rows={[{ k: A('fyOpen'), v: A('fyOpenV') }, { k: A('fyStart'), v: A('fyStartV') }, { k: A('fyEnd'), v: `${ec(d.yearEnds)} (${fdy(d.yearEnds)})` }, { k: A('today'), v: ec(new Date()) }]} />
           <List title={A('ckTitle')} empty={A('ckNone')} rows={(claims.data ?? []).slice(0, 6).map((c) => ({ t: c.business, s: `${methodL(c.method)} · ${c.receivedBy ?? c.transactionId}`, r: birr(c.amount), go: () => ctx.nav({ v: 'claim', id: c.id }) }))}
             more={(claims.data?.length ?? 0) > 6 ? { t: A('ckAll', { a: claims.data!.length }), go: () => ctx.nav({ v: 'claims' }) } : undefined} />
@@ -123,7 +123,7 @@ export function BusinessFinance({ ctx, id, onChange }: { ctx: Ctx; id: string; o
   });
   const addBranch = () => {
     const n = (b.branches ?? 1) + 1;
-    const note = b.plan === 'pilot' ? A('abPilot') : b.plan === 'starter' ? A('abStarter', { a: birr(price('plan.full.monthly_fee_birr')) }) : A('abFull', { a: birr(price('plan.extra_branch.monthly_fee_birr')) });
+    const note = b.plan === 'pilot' ? A('abPilot') : b.plan === 'starter' ? A('abStarter', { a: birr(price('plan.full.yearly_fee_birr')) }) : A('abFull', { a: birr(price('plan.extra_branch.yearly_fee_birr')) });
     ctx.open({
       title: A('abTitle', { a: b.name }), sub: A('abSub', { a: n }), note, ok: A('abOk'),
       inputs: [{ label: A('abName'), key: 'name', ph: A('abNamePh') }],
@@ -134,8 +134,8 @@ export function BusinessFinance({ ctx, id, onChange }: { ctx: Ctx; id: string; o
     title: A('cpTitle2'), sub: A('cpSub2', { a: b.name, b: planName(b.plan), c: brN(b.branches ?? 1) }), ok: A('cpOk2'),
     groups: [{ label: A('cpNew'), key: 'plan', opts: [
       { v: 'pilot', l: A('planPilot') },
-      { v: 'starter', l: (b.branches ?? 1) > 1 ? A('cpStarterOne', { a: birr(price('plan.starter.monthly_fee_birr')) }) : A('cpStarterP', { a: birr(price('plan.starter.monthly_fee_birr')) }) },
-      { v: 'full', l: A('cpFullP', { a: birr(price('plan.full.monthly_fee_birr')) }) },
+      { v: 'starter', l: (b.branches ?? 1) > 1 ? A('cpStarterOne', { a: birr(price('plan.starter.yearly_fee_birr')) }) : A('cpStarterP', { a: birr(price('plan.starter.yearly_fee_birr')) }) },
+      { v: 'full', l: A('cpFullP', { a: birr(price('plan.full.yearly_fee_birr')) }) },
     ] }],
     note: A('cpNote', { a: birr(b.paid) }),
     need: (x) => !!x.plan && x.plan !== b.plan && !(x.plan === 'starter' && (b.branches ?? 1) > 1),
@@ -170,7 +170,7 @@ export function BusinessFinance({ ctx, id, onChange }: { ctx: Ctx; id: string; o
     <>
       <Stats cols={5} items={[
         { v: planName(b.plan), l: A('kPlan'), s: b.branches ? brN(b.branches) : '' },
-        { v: b.plan === 'pilot' ? A('noFee') : birr(b.fee), l: A('feeForYear', { a: b.financeYear }), s: extras ? A('feeExtras', { a: birr(price('plan.full.monthly_fee_birr')), b: extras }, extras) : '' },
+        { v: b.plan === 'pilot' ? A('noFee') : birr(b.fee), l: A('feeForYear', { a: b.financeYear }), s: extras ? A('feeExtras', { a: birr(price('plan.full.yearly_fee_birr')), b: extras }, extras) : '' },
         { v: birr(b.paid), l: A('hPaid'), s: A('paymentsN', { a: b.payments.filter((p) => !p.reversed).length }, b.payments.filter((p) => !p.reversed).length) },
         { v: b.billing === 'paid' ? A('paidInFull') : b.plan === 'pilot' ? A('nothingDue') : birr(b.balance), l: b.billing === 'paid' || b.plan === 'pilot' ? A('hBalance') : A('balToPay'),
           s: b.billing === 'btrial' && b.dueOn ? A('trialEnds', { a: fd(b.dueOn) }) : b.billing === 'overdue' && b.dueOn ? A('wasDue', { a: fd(b.dueOn) }) : ['due', 'partial'].includes(b.billing) ? (b.dueOn ? A('dueOn', { a: fd(b.dueOn) }) : A('dueNow')) : '',

@@ -70,8 +70,10 @@ export function StaffAuth() {
       case 'locked': return L('staff.siLocked');
       case 'too_many_requests': case 'too_many_codes': return L('common.tooMany');
       case 'wrong_pin': {
+        // No count when the phone matches no account: say "wrong" without "0 tries left".
         const left = e.body.triesLeft;
-        return left === 1 ? L('staff.siWrong1') : L('staff.siWrong', { n: typeof left === 'number' ? left : 0 });
+        if (typeof left !== 'number') return L('staff.siWrongPlain');
+        return left === 1 ? L('staff.siWrong1') : L('staff.siWrong', { n: left });
       }
       default: return L('common.offline');
     }

@@ -5,11 +5,11 @@
 
 /** Money and limit defaults (DECISIONS.md, 2026-11-06). Every one is a setting. */
 export const DEFAULT_SETTINGS: Record<string, unknown> = {
-  'plan.starter.monthly_fee_birr': 1600,
+  'plan.starter.yearly_fee_birr': 19000,
   'plan.starter.branches_included': 1,
-  'plan.full.monthly_fee_birr': 2100,
+  'plan.full.yearly_fee_birr': 21000,
   'plan.full.branches_included': 2,
-  'plan.extra_branch.monthly_fee_birr': 420,
+  'plan.extra_branch.yearly_fee_birr': 5000,
   'plan.trial_days': 15,
   'agent.commission_percent.starter': 16,
   'agent.commission_percent.full': 20,

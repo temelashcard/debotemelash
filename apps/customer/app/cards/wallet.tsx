@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { isLang, t, type Lang, type MessageKey } from '@temelash/i18n';
-import { ApiFailure, apiPost, authed, loadSession, saveSession } from '@temelash/ui';
+import { ApiFailure, apiPost, authed, loadSession, saveSession, stampIconPath } from '@temelash/ui';
 import { QrSvg, useCardCode } from './live-qr';
 import s from './wallet.module.css';
 import { BELL, BusinessPage, CustomerMenu, History, Notifications, Settings } from './more';
@@ -19,7 +19,7 @@ interface Card {
   id: string;
   status: 'active' | 'paused' | 'redeemed' | 'expired';
   shopClosed?: boolean;
-  shop: { name: string; shopCode: string; color?: string; logoUrl?: string | null };
+  shop: { name: string; shopCode: string; color?: string; stampIcon?: string; logoUrl?: string | null };
   count: number;
   total: number;
   round?: number;
@@ -295,6 +295,7 @@ export function Wallet() {
     const r = ready(sel);
     const cols = sel.total <= 8 ? 4 : 5;
     const ats = new Set(sel.ladder.map((t) => t.at));
+    const face = stampIconPath(sel.shop.stampIcon);
     const big = nextTier(sel) ?? sel.ladder[sel.ladder.length - 1];
     return (
       <main className={s.screen}>
@@ -331,7 +332,10 @@ export function Wallet() {
                     return (
                       <li key={i} className={`${s.stamp} ${isNew ? 'tc-stampin' : ''}`} data-on={on}
                         aria-label={on ? L('main.stampAria', { a: i + 1 }) : L('join.stampAria', { n: i + 1 })}>
-                        {on ? <Icon d={TICK} size={20} color="#fff" width={2.4} /> : ats.has(i + 1) ? <Icon d={GIFT} size={20} color="#595959" /> : <span className={s.stampN}>{i + 1}</span>}
+                        {/* OwnCard "Stamp face": the shop's icon instead of the numbers (and the tick), when it picked one. */}
+                        {on ? <Icon d={face ?? TICK} size={20} color={face ? 'currentColor' : '#fff'} width={face ? 2 : 2.4} />
+                          : ats.has(i + 1) ? <Icon d={GIFT} size={20} color="#595959" />
+                          : face ? <Icon d={face} size={20} color="#a6a6a6" width={1.8} /> : <span className={s.stampN}>{i + 1}</span>}
                       </li>
                     );
                   })}

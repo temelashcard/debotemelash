@@ -36,6 +36,9 @@ export function configureApp(app: INestApplication): void {
   // Wrapped: Nest skips its own JSON parser when it finds one named jsonParser already installed.
   const bigJson = json({ limit: '6mb' });
   app.use('/api/v1/owner/payments', (req: Parameters<typeof bigJson>[0], res: Parameters<typeof bigJson>[1], next: Parameters<typeof bigJson>[2]) => bigJson(req, res, next));
+  // A shop page cover (at most 500 kB, sent as base64).
+  const coverJson = json({ limit: '1mb' });
+  app.use('/api/v1/owner/look/cover', (req: Parameters<typeof coverJson>[0], res: Parameters<typeof coverJson>[1], next: Parameters<typeof coverJson>[2]) => coverJson(req, res, next));
   // Behind Caddy: trust one proxy hop so req.ip is the caller, for rate limits and the audit log.
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
   app.enableShutdownHooks();

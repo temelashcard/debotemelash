@@ -295,8 +295,8 @@ export class StampsService {
   /** The customer's view of their cards, with what the phone needs to make codes offline. */
   async customerCards(customerId: string) {
     return this.sql.begin(async (tx) => {
-      const cards = await tx<(CardRow & { shop_name: string; shop_code: string; shop_closed: boolean; brand_color: string; logo_version: number | null; created_at: Date })[]>`
-        select c.*, b.name as shop_name, b.shop_code, b.brand_color, b.status = 'closed' as shop_closed, (select version from tc.business_logo l where l.business_id = b.id) as logo_version
+      const cards = await tx<(CardRow & { shop_name: string; shop_code: string; shop_closed: boolean; brand_color: string; stamp_icon: string; logo_version: number | null; created_at: Date })[]>`
+        select c.*, b.name as shop_name, b.shop_code, b.brand_color, b.stamp_icon, b.status = 'closed' as shop_closed, (select version from tc.business_logo l where l.business_id = b.id) as logo_version
         from tc.card c join tc.business b on b.id = c.business_id
         where c.customer_id = ${customerId} and c.status in ('active', 'paused', 'redeemed', 'expired') order by c.created_at`;
       const out = [];
@@ -324,7 +324,7 @@ export class StampsService {
           status: c.status,
           // OwnCloseBiz: "Customers will see This shop has closed on their card."
           shopClosed: c.shop_closed,
-          shop: { name: c.shop_name, shopCode: c.shop_code, color: c.brand_color, logoUrl: c.logo_version ? `/api/v1/shops/${c.shop_code}/logo?v=${c.logo_version}` : null },
+          shop: { name: c.shop_name, shopCode: c.shop_code, color: c.brand_color, stampIcon: c.stamp_icon, logoUrl: c.logo_version ? `/api/v1/shops/${c.shop_code}/logo?v=${c.logo_version}` : null },
           ...(await cardProgress(tx, c.id, rules.stamps_needed)),
           total: rules.stamps_needed,
           ladder: rules.ladder,

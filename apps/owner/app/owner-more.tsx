@@ -79,15 +79,47 @@ async function squareLogo(file: File): Promise<string> {
   return png.length * 0.75 <= 280_000 ? png : c.toDataURL('image/jpeg', 0.85);
 }
 
+/** Shop page cover: crop to a centred 2:1 and scale to 1200 x 600, as JPEG small enough to upload. */
+async function wideCover(file: File): Promise<string> {
+  const img = await createImageBitmap(file);
+  const w = Math.min(img.width, img.height * 2);
+  const h = w / 2;
+  const c = document.createElement('canvas');
+  c.width = 1200;
+  c.height = 600;
+  c.getContext('2d')!.drawImage(img, (img.width - w) / 2, (img.height - h) / 2, w, h, 0, 0, 1200, 600);
+  for (const q of [0.82, 0.7, 0.55, 0.4]) {
+    const jpg = c.toDataURL('image/jpeg', q);
+    if (jpg.length * 0.75 <= 480_000) return jpg;
+  }
+  return c.toDataURL('image/jpeg', 0.3);
+}
+
+const TAGLINE_MAX = 60;
+type LookData = { color: string; swatches: string[]; logoUrl: string | null; tagline: string | null; coverUrl: string | null };
+
 export function Look({ L, shopName, onSaved }: { L: Lfn; shopName: string; onSaved: (m: string) => void }) {
-  const [look, setLook] = useState<{ color: string; swatches: string[]; logoUrl: string | null } | null>(null);
+  const [look, setLook] = useState<LookData | null>(null);
   const [color, setColor] = useState('');
+  const [tagline, setTagline] = useState('');
   const [err, setErr] = useState('');
+  const [coverErr, setCoverErr] = useState('');
   const file = useRef<HTMLInputElement>(null);
-  const load = () => authed<{ color: string; swatches: string[]; logoUrl: string | null }>('owner', 'GET', '/owner/look').then((l) => { setLook(l); setColor(l.color); });
+  const coverFile = useRef<HTMLInputElement>(null);
+  const load = (keepTagline = false) => authed<LookData>('owner', 'GET', '/owner/look').then((l) => {
+    setLook(l);
+    setColor(l.color);
+    if (!keepTagline) setTagline(l.tagline ?? '');
+  });
   useEffect(() => { load(); }, []);
   if (!look) return null;
   const fg = fgFor(color);
+  const save = async () => {
+    await authed('owner', 'POST', '/owner/look', { color });
+    if (tagline.trim() !== (look.tagline ?? '')) await authed('owner', 'POST', '/owner/look/tagline', { tagline });
+    await load();
+    onSaved(L('owner.snSavedToast'));
+  };
   return (
     <>
       <p className={s.help}>{L('owner.lkHelp')}</p>
@@ -119,7 +151,143 @@ export function Look({ L, shopName, onSaved }: { L: Lfn; shopName: string; onSav
         ))}
       </div>
       <p className={s.muted}>{fg === '#ffffff' ? L('owner.lkContrastW') : L('owner.lkContrastD')}</p>
-      <button type="button" className={s.cta} onClick={async () => { await authed('owner', 'POST', '/owner/look', { color }); onSaved(L('owner.snSavedToast')); }}>{L('owner.save')}</button>
+
+      {/* Shop page (no board; DECISIONS 2026-11-21): what customers see after scanning the QR code. */}
+      <div className={s.section}>{L('owner.lkPage')}</div>
+      <p className={s.muted} style={{ marginTop: 0 }}>{L('owner.lkPageHelp')}</p>
+      <div className={s.card} style={{ marginTop: 10, overflow: 'hidden', borderRadius: 10 }} aria-label={L('owner.psPreview')}>
+        <div style={{ height: 120, background: look.coverUrl ? `${color} url(${look.coverUrl}) center / cover no-repeat` : color }} />
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, padding: '0 14px 14px' }}>
+          {look.logoUrl
+            ? <img src={look.logoUrl} alt="" width={64} height={64} style={{ marginTop: -32, borderRadius: '50%', background: '#fff', border: '3px solid #fff', flex: 'none' }} />
+            : <span style={{ marginTop: -32, width: 64, height: 64, borderRadius: '50%', border: '3px solid #fff', background: fg, color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, flex: 'none' }}>{shopName.slice(0, 2).toUpperCase()}</span>}
+          <div style={{ minWidth: 0, paddingTop: 10 }}>
+            <div className={s.rowTitle}>{shopName}</div>
+            {tagline.trim() && <div className={s.muted} style={{ overflowWrap: 'anywhere' }}>{tagline.trim()}</div>}
+          </div>
+        </div>
+      </div>
+      <div className={s.label}>{L('owner.lkCover')}</div>
+      <p className={s.muted} style={{ marginTop: 0 }}>{L('owner.lkCoverHelp')}</p>
+      <input ref={coverFile} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={async (e) => {
+        const f = e.target.files?.[0];
+        e.target.value = '';
+        if (!f) return;
+        try {
+          await authed('owner', 'POST', '/owner/look/cover', { dataUrl: await wideCover(f) });
+          await load(true);
+          setCoverErr('');
+          onSaved(L('owner.snSavedToast'));
+        } catch (x) {
+          setCoverErr(x instanceof ApiFailure && x.code !== 'offline' ? L('owner.lkCoverHelp') : L('common.offline'));
+        }
+      }} />
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <button type="button" className={s.outline} style={{ flex: 1 }} onClick={() => coverFile.current?.click()}>{look.coverUrl ? L('owner.lkCoverChange') : L('owner.lkCoverAdd')}</button>
+        {look.coverUrl && (
+          <button type="button" className={s.outline} style={{ flex: 1 }} onClick={async () => {
+            try {
+              await authed('owner', 'POST', '/owner/look/cover/remove');
+              await load(true);
+              setCoverErr('');
+              onSaved(L('owner.snSavedToast'));
+            } catch {
+              setCoverErr(L('common.offline'));
+            }
+          }}>{L('owner.lkCoverRemove')}</button>
+        )}
+      </div>
+      <p role="alert" className={s.alert}>{coverErr}</p>
+      <label className={s.label} htmlFor="shop-tagline">{L('owner.lkTagline')}</label>
+      <input id="shop-tagline" className={s.input} value={tagline} maxLength={TAGLINE_MAX} placeholder={L('owner.lkTaglinePh')}
+        onChange={(e) => setTagline(e.target.value)} aria-describedby="shop-tagline-count" />
+      <p id="shop-tagline-count" className={s.muted} style={{ textAlign: 'right' }}>{L('owner.lkTaglineCount', { a: tagline.length, b: TAGLINE_MAX })}</p>
+
+      <button type="button" className={s.cta} onClick={save}>{L('owner.save')}</button>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- shop page Wi-Fi
+type WifiData = { enabled: boolean; ssid: string; password: string; security: 'WPA' | 'WEP' | 'nopass'; hidden: boolean };
+
+/** A row switch, the same as on Alerts (OwnAlertSet). */
+function Switch({ on, title, sub, onToggle }: { on: boolean; title: string; sub: string; onToggle: () => void }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} className={s.rowBtn} onClick={onToggle}
+      style={{ width: '100%', minHeight: 60, padding: '8px 0', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', color: '#333' }}>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 15, lineHeight: '20px', fontWeight: 700 }}>{title}</span>
+        <span style={{ display: 'block', marginTop: 2, fontSize: 13, lineHeight: '18px', color: '#555' }}>{sub}</span>
+      </span>
+      <span style={{ flex: 'none', width: 46, height: 28, borderRadius: 14, background: on ? '#333' : '#cfcfcf', position: 'relative' }}>
+        <span className="tc-knob" style={{ position: 'absolute', top: 3, left: on ? 21 : 3, width: 22, height: 22, borderRadius: '50%', background: '#fff' }} />
+      </span>
+    </button>
+  );
+}
+
+/** Shop page Wi-Fi (DECISIONS 2026-11-21): customers see it on the shop page only while it is on. */
+export function Wifi({ L, onSaved }: { L: Lfn; onSaved: (m: string) => void }) {
+  const [w, setW] = useState<WifiData | null>(null);
+  const [show, setShow] = useState(false);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { authed<WifiData>('owner', 'GET', '/owner/wifi').then(setW).catch(() => setErr(L('common.offline'))); }, []);
+  if (!w) return <p role="alert" className={s.alert}>{err}</p>;
+  const set = (p: Partial<WifiData>) => { setW({ ...w, ...p }); setErr(''); };
+  const errText = (e: unknown) => {
+    if (!(e instanceof ApiFailure) || e.code === 'offline') return L('common.offline');
+    if (e.code === 'need_wifi_name' || e.code === 'bad_wifi_name') return L('owner.wfErrName');
+    if (e.code === 'need_wifi_password' || e.code === 'bad_wifi_password') return w.security === 'WEP' ? L('owner.wfErrWep') : L('owner.wfErrWpa');
+    return L('common.offline');
+  };
+  const save = async () => {
+    setBusy(true);
+    try {
+      await authed('owner', 'POST', '/owner/wifi', { ...w, password: w.security === 'nopass' ? '' : w.password });
+      onSaved(L('owner.snSavedToast'));
+    } catch (e) {
+      setErr(errText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <p className={s.help}>{L('owner.wfHelp')}</p>
+      <div className={s.kvCard} style={{ marginTop: 16, padding: '0 16px' }}>
+        <Switch on={w.enabled} title={L('owner.wfShow')} sub={w.enabled ? L('owner.wfShowOn') : L('owner.wfShowOff')} onToggle={() => set({ enabled: !w.enabled })} />
+      </div>
+
+      <label className={s.label} htmlFor="wifi-ssid">{L('owner.wfName')}</label>
+      <input id="wifi-ssid" className={s.input} value={w.ssid} maxLength={32} autoComplete="off" placeholder={L('owner.wfNamePh')} onChange={(e) => set({ ssid: e.target.value })} />
+
+      <div className={s.label}>{L('owner.wfSecurity')}</div>
+      <div className={s.chips} style={{ marginTop: 0 }}>
+        {([['WPA', 'owner.wfWpa'], ['WEP', 'owner.wfWep'], ['nopass', 'owner.wfOpen']] as const).map(([v, k]) => (
+          <button key={v} type="button" className={s.chip} aria-pressed={w.security === v} onClick={() => set({ security: v })}>{L(k)}</button>
+        ))}
+      </div>
+
+      {w.security !== 'nopass' && (
+        <>
+          <label className={s.label} htmlFor="wifi-pass">{L('owner.wfPassword')}</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input id="wifi-pass" className={s.input} style={{ flex: 1, minWidth: 0 }} type={show ? 'text' : 'password'} value={w.password} maxLength={63} autoComplete="off"
+              placeholder={L('owner.wfPasswordPh')} onChange={(e) => set({ password: e.target.value })} />
+            <button type="button" className={s.chip} aria-pressed={show} onClick={() => setShow(!show)}>{show ? L('owner.wfHide') : L('owner.wfReveal')}</button>
+          </div>
+        </>
+      )}
+
+      <div className={s.kvCard} style={{ marginTop: 16, padding: '0 16px' }}>
+        <Switch on={w.hidden} title={L('owner.wfHidden')} sub={L('owner.wfHiddenSub')} onToggle={() => set({ hidden: !w.hidden })} />
+      </div>
+
+      <p className={s.muted} style={{ margin: '12px 4px 0' }}>{L('owner.wfNote')}</p>
+      <p role="alert" className={s.alert}>{err}</p>
+      <button type="button" className={s.cta} disabled={busy} onClick={save}>{L('owner.save')}</button>
     </>
   );
 }
@@ -232,7 +400,7 @@ export function Security({ L, onSaved }: { L: Lfn; onSaved: (m: string) => void 
 const LOG_KEYS: Record<string, MessageKey | string> = {
   'team.added': 'owner.addPerson', 'team.pin_reset': 'owner.sdReset', 'team.unlocked': 'owner.sdUnlock', 'team.removed': 'owner.sdOff',
   'team.limit': 'owner.limSecLbl', 'rules.changed': 'owner.lgCardRules', 'shop.details': 'owner.lgDetails', 'shop.look': 'owner.lgLook',
-  'shop.logo': 'owner.lgLook', 'branch.added': 'owner.brAdd', 'branch.saved': 'owner.lgHours', 'stamp.approved': 'owner.rvApprovedToast',
+  'shop.logo': 'owner.lgLook', 'shop.stamp_icon': 'owner.lgLook', 'branch.added': 'owner.brAdd', 'branch.saved': 'owner.lgHours', 'stamp.approved': 'owner.rvApprovedToast',
   'stamp.rejected': 'owner.rvDeclinedToast', 'stamp.checked': 'owner.rvFineToast', 'stamp.added': 'staff.stampLine', 'stamp.pending': 'staff.needsApproval',
   'reward.redeemed': 'staff.rewardLine', 'card.fix_add': 'owner.fixAdd', 'card.fix_remove': 'owner.fixRemove', 'card.fix_undo': 'owner.fixUndo',
   'card.fix_extend': 'owner.fixExtend', 'card.fix_pause': 'owner.fixPause', 'card.fix_resume': 'owner.fixResume', 'auth.signin': 'owner.siBtn',

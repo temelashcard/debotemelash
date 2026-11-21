@@ -101,7 +101,7 @@ export class Notifier implements OnModuleInit, OnApplicationShutdown {
   }
 
   /**
-   * A trial or a month left unpaid pauses `billing.grace_days` later (DECISIONS.md, 2026-11-06):
+   * A trial or a year left unpaid pauses `billing.grace_days` later (DECISIONS.md, 2026-11-06):
    * stamping and rewards stop until a payment is approved, which lifts the pause. Cards stay safe.
    * The owner hears by inbox and SMS. Returns how many paused.
    */

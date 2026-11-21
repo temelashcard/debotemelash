@@ -101,3 +101,9 @@
 .sentTitle { margin: 18px 0 0; font-size: 22px; font-weight: 700; color: #333 }
 .fieldLbl { display: block; margin: 12px 0 6px; font-size: 13px; letter-spacing: 0.7px; color: #555 }
 .textarea { width: 100%; box-sizing: border-box; padding: 12px 14px; border: 1.5px solid #444; border-radius: 10px; background: #fff; outline: none; color: #333; font: 400 16px/22px 'Lato', 'Noto Sans Ethiopic', system-ui, sans-serif; resize: none }
+/* OwnCard "Stamp face": a preview row in the customer card's stamp style, and icon choices. */
+.faceRow { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap }
+.faceDot { width: 40px; height: 40px; box-sizing: border-box; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1.5px dashed #bdbdbd; background: #fff }
+.faceDot[data-on='true'] { border: 1.5px solid transparent }
+.faceN { font-size: 14px; letter-spacing: 0.4px; color: #595959 }
+.faceChip { min-width: 52px; padding: 0 12px; display: inline-flex; align-items: center; justify-content: center }

@@ -13,6 +13,8 @@ import { TokensService } from '../auth/tokens.service';
 
 /** The 12 card colours of the OwnLook board. */
 export const SWATCHES = ['#0F6E4B', '#C8341F', '#FFC72C', '#1F5FA8', '#6B3FA0', '#C2185B', '#E8731A', '#0E7C86', '#7A4B2A', '#222222', '#6B7A1F', '#5BA9D6'];
+/** Same ids as `STAMP_ICON_IDS` in @temelash/ui and the check on tc.business.stamp_icon. */
+export const STAMP_ICONS = ['number', 'star', 'heart', 'cup', 'food', 'scissors', 'polish', 'flower', 'bag'];
 
 /** Image type from its first bytes, so a renamed file cannot pass as a picture. */
 function sniff(b: Buffer): string | null {
@@ -36,9 +38,111 @@ export class OwnerSettingsController {
 
   @Get('look')
   async look(@CurrentActor() a: Actor) {
-    const [r] = await this.sql<{ brand_color: string; shop_code: string; version: number | null }[]>`
-      select b.brand_color, b.shop_code, l.version from tc.business b left join tc.business_logo l on l.business_id = b.id where b.id = ${a.businessId!}`;
-    return { color: r.brand_color, swatches: SWATCHES, logoUrl: r.version ? `/api/v1/shops/${r.shop_code}/logo?v=${r.version}` : null };
+    const [r] = await this.sql<{ brand_color: string; stamp_icon: string; shop_code: string; tagline: string | null; version: number | null; cover_version: number | null }[]>`
+      select b.brand_color, b.stamp_icon, b.shop_code, b.tagline, l.version, c.version as cover_version
+      from tc.business b left join tc.business_logo l on l.business_id = b.id left join tc.business_cover c on c.business_id = b.id
+      where b.id = ${a.businessId!}`;
+    return {
+      color: r.brand_color, swatches: SWATCHES, stampIcon: r.stamp_icon, stampIcons: STAMP_ICONS,
+      logoUrl: r.version ? `/api/v1/shops/${r.shop_code}/logo?v=${r.version}` : null,
+      tagline: r.tagline, coverUrl: r.cover_version ? `/api/v1/shops/${r.shop_code}/cover?v=${r.cover_version}` : null,
+    };
+  }
+
+  /** Shop page: the short line under the shop name. Empty clears it. */
+  @Post('look/tagline')
+  async saveTagline(@Body() b: Record<string, unknown>, @CurrentActor() a: Actor, @Req() req: Request) {
+    if (a.type !== 'owner') throw forbidden();
+    if (typeof b.tagline !== 'string') throw badRequest('bad_tagline');
+    const tagline = b.tagline.replace(/\s+/g, ' ').trim();
+    if (tagline.length > 60) throw badRequest('bad_tagline');
+    await this.sql.begin(async (tx) => {
+      await tx`update tc.business set tagline = ${tagline || null} where id = ${a.businessId!}`;
+      await writeAudit(tx, { actorType: a.type, actorId: a.id, role: a.type, businessId: a.businessId, ip: req.ip, type: 'shop.tagline', text: tagline ? 'Tagline changed' : 'Tagline removed', detail: { tagline: tagline || null } });
+    });
+    return { ok: true };
+  }
+
+  /** Shop page cover as a data URL (the owner's phone has already cropped it to 1200 x 600). */
+  @Post('look/cover')
+  async saveCover(@Body() b: Record<string, unknown>, @CurrentActor() a: Actor, @Req() req: Request) {
+    if (a.type !== 'owner') throw forbidden();
+    const m = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(b.dataUrl ?? ''));
+    if (!m) throw badRequest('bad_image');
+    const bytes = Buffer.from(m[2], 'base64');
+    const mime = sniff(bytes);
+    if (!mime || mime !== m[1]) throw badRequest('bad_image');
+    if (bytes.length > 500_000) throw badRequest('image_too_big');
+    await this.sql.begin(async (tx) => {
+      await tx`insert into tc.business_cover (business_id, mime, bytes, updated_by) values (${a.businessId!}, ${mime}, ${bytes}, ${a.id})
+               on conflict (business_id) do update set mime = excluded.mime, bytes = excluded.bytes, version = nextval('tc.business_cover_version_seq'),
+                 updated_by = excluded.updated_by, updated_at = now()`;
+      await writeAudit(tx, { actorType: a.type, actorId: a.id, role: a.type, businessId: a.businessId, ip: req.ip, type: 'shop.cover', text: 'Cover photo changed', detail: { bytes: bytes.length } });
+    });
+    return { ok: true };
+  }
+
+  /** Shop page Wi-Fi: what the owner saved, on or off. Managers may look; only the owner changes it. */
+  @Get('wifi')
+  async wifi(@CurrentActor() a: Actor) {
+    const [w] = await this.sql<{ enabled: boolean; ssid: string; password: string; security: string; hidden: boolean }[]>`
+      select enabled, ssid, password, security, hidden from tc.business_wifi where business_id = ${a.businessId!}`;
+    return w ?? { enabled: false, ssid: '', password: '', security: 'WPA', hidden: false };
+  }
+
+  /**
+   * Save the Wi-Fi and whether customers see it. On needs a network name and, unless the network is
+   * open, its password (WPA 8 to 63 characters; WEP 5, 10, 13 or 26). Off keeps the details for later.
+   */
+  @Post('wifi')
+  async saveWifi(@Body() b: Record<string, unknown>, @CurrentActor() a: Actor, @Req() req: Request) {
+    if (a.type !== 'owner') throw forbidden();
+    const enabled = b.enabled === true;
+    const ssid = typeof b.ssid === 'string' ? b.ssid.trim() : '';
+    const password = typeof b.password === 'string' ? b.password : '';
+    const security = String(b.security ?? 'WPA');
+    const hidden = b.hidden === true;
+    if (!['WPA', 'WEP', 'nopass'].includes(security)) throw badRequest('bad_wifi_security');
+    if (ssid.length > 32) throw badRequest('bad_wifi_name');
+    if (enabled && !ssid) throw badRequest('need_wifi_name');
+    if (security === 'nopass' && password) throw badRequest('bad_wifi_password');
+    if (security === 'WPA' && password && (password.length < 8 || password.length > 63)) throw badRequest('bad_wifi_password');
+    if (security === 'WEP' && password && ![5, 10, 13, 26].includes(password.length)) throw badRequest('bad_wifi_password');
+    if (enabled && security !== 'nopass' && !password) throw badRequest('need_wifi_password');
+    await this.sql.begin(async (tx) => {
+      await tx`insert into tc.business_wifi (business_id, enabled, ssid, password, security, hidden, updated_by)
+               values (${a.businessId!}, ${enabled}, ${ssid}, ${password}, ${security}, ${hidden}, ${a.id})
+               on conflict (business_id) do update set enabled = excluded.enabled, ssid = excluded.ssid, password = excluded.password,
+                 security = excluded.security, hidden = excluded.hidden, updated_by = excluded.updated_by, updated_at = now()`;
+      // Never the password in the log.
+      await writeAudit(tx, { actorType: a.type, actorId: a.id, role: a.type, businessId: a.businessId, ip: req.ip, type: 'shop.wifi',
+        text: enabled ? 'Wi-Fi shown on the shop page' : 'Wi-Fi hidden from the shop page', detail: { enabled, ssid, security, hidden } });
+    });
+    return { ok: true };
+  }
+
+  /** Back to the brand colour. */
+  @Post('look/cover/remove')
+  async removeCover(@CurrentActor() a: Actor, @Req() req: Request) {
+    if (a.type !== 'owner') throw forbidden();
+    await this.sql.begin(async (tx) => {
+      await tx`delete from tc.business_cover where business_id = ${a.businessId!}`;
+      await writeAudit(tx, { actorType: a.type, actorId: a.id, role: a.type, businessId: a.businessId, ip: req.ip, type: 'shop.cover', text: 'Cover photo removed' });
+    });
+    return { ok: true };
+  }
+
+  /** OwnCard "Stamp face": numbers or one icon on the card's spaces. Look only, so no new rule version. */
+  @Post('look/stamp-icon')
+  async saveStampIcon(@Body() b: Record<string, unknown>, @CurrentActor() a: Actor, @Req() req: Request) {
+    if (a.type !== 'owner') throw forbidden();
+    const icon = String(b.icon ?? '');
+    if (!STAMP_ICONS.includes(icon)) throw badRequest('bad_icon');
+    await this.sql.begin(async (tx) => {
+      await tx`update tc.business set stamp_icon = ${icon} where id = ${a.businessId!}`;
+      await writeAudit(tx, { actorType: a.type, actorId: a.id, role: a.type, businessId: a.businessId, ip: req.ip, type: 'shop.stamp_icon', text: 'Stamp face changed', detail: { icon } });
+    });
+    return { ok: true };
   }
 
   @Post('look')
